@@ -1,6 +1,11 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 
 interface ChatResponse {
   message: string;
@@ -100,7 +105,23 @@ export default function ChatPage() {
                     : "bg-white text-neutral-800 border rounded-bl-sm"
                   }`}
               >
-                <p className="whitespace-pre-wrap">{m.content}</p>
+                {m.role === "assistant" ? (
+                  <div className="prose prose-sm prose-neutral max-w-none prose-p:last:mb-0 prose-pre:overflow-x-auto prose-pre:text-xs prose-code:rounded prose-code:bg-neutral-100 prose-code:px-1 prose-code:py-0.5 prose-code:font-normal prose-code:before:content-none prose-code:after:content-none prose-pre:prose-code:bg-transparent prose-pre:prose-code:p-0 prose-table:block prose-table:overflow-x-auto">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm, remarkMath]}
+                      rehypePlugins={[rehypeKatex]}
+                      components={{
+                        a: ({ ...props }) => (
+                          <a target="_blank" rel="noopener noreferrer" {...props} />
+                        ),
+                      }}
+                    >
+                      {m.content}
+                    </ReactMarkdown>
+                  </div>
+                ) : (
+                  <p className="whitespace-pre-wrap">{m.content}</p>
+                )}
                 {m.role === "assistant" && m.model && (
                   <p className="mt-1 text-[11px] text-neutral-400">
                     {m.model} · {m.latencyMs}ms
@@ -131,7 +152,7 @@ export default function ChatPage() {
             onKeyDown={handleKeyDown}
             rows={1}
             placeholder="輸入訊息…（Enter 送出，Shift+Enter 換行）"
-            className="flex-1 resize-none rounded-xl border px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+            className="flex-1 resize-none rounded-xl border px-4 py-2 text-sm text-black outline-none focus:ring-2 focus:ring-blue-500"
           />
           <button
             onClick={sendMessage}
