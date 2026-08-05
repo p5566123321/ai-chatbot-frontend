@@ -6,12 +6,7 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
-
-interface ChatResponse {
-  message: string;
-  model: string;
-  latencyMs: number;
-}
+import { parseSseStream } from "./lib/sse";
 
 interface Message {
   role: "user" | "assistant";
@@ -20,53 +15,192 @@ interface Message {
   latencyMs?: number;
 }
 
+interface HistoryMessage {
+  role: "USER" | "ASSISTANT" | "SYSTEM";
+  content: string;
+  createdAt: string | null;
+}
+
+interface StreamStatus {
+  generating: boolean;
+  partial?: string;
+}
+
+const CONVERSATION_ID_STORAGE_KEY = "chatbot_conversation_id";
+const STATUS_POLL_INTERVAL_MS = 2000;
+
+function toMessages(history: HistoryMessage[]): Message[] {
+  return history
+    .filter((m) => m.role !== "SYSTEM")
+    .map((m) => ({
+      role: m.role === "USER" ? "user" : "assistant",
+      content: m.content,
+    }));
+}
+
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [awaitingFirstChunk, setAwaitingFirstChunk] = useState(false);
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, loading]);
+  }, [messages, awaitingFirstChunk]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let pollId: ReturnType<typeof setInterval> | null = null;
+
+    async function loadHistory(id: string) {
+      const res = await fetch(`/api/conversations/${id}/messages`);
+      if (!res.ok || cancelled) return;
+      const history: HistoryMessage[] = await res.json();
+      if (!cancelled) setMessages(toMessages(history));
+    }
+
+    // If a generation was still running when the page was last closed/refreshed, pick it back
+    // up: show the partial text immediately, then poll until it's done and refetch the final
+    // (possibly "[回覆中斷]"-marked) persisted content instead of leaving the UI stuck empty.
+    async function resumeIfGenerating(id: string) {
+      const res = await fetch(`/api/conversations/${id}/messages/stream/status`);
+      if (!res.ok || cancelled) return;
+      const status: StreamStatus = await res.json();
+      if (!status.generating || cancelled) return;
+
+      setLoading(true);
+      setMessages((prev) => [...prev, { role: "assistant", content: status.partial ?? "" }]);
+
+      pollId = setInterval(async () => {
+        try {
+          const pollRes = await fetch(`/api/conversations/${id}/messages/stream/status`);
+          if (!pollRes.ok || cancelled) return;
+          const pollStatus: StreamStatus = await pollRes.json();
+          if (cancelled) return;
+
+          if (pollStatus.generating) {
+            setMessages((prev) => {
+              const next = [...prev];
+              next[next.length - 1] = { ...next[next.length - 1], content: pollStatus.partial ?? "" };
+              return next;
+            });
+            return;
+          }
+
+          if (pollId) clearInterval(pollId);
+          setLoading(false);
+          await loadHistory(id);
+        } catch (err) {
+          console.error("Failed to poll stream status", err);
+          if (pollId) clearInterval(pollId);
+          setLoading(false);
+        }
+      }, STATUS_POLL_INTERVAL_MS);
+    }
+
+    async function bootstrap() {
+      let id = localStorage.getItem(CONVERSATION_ID_STORAGE_KEY);
+      if (!id) {
+        try {
+          const res = await fetch("/api/conversations", { method: "POST" });
+          if (!res.ok) throw new Error(`API error: ${res.status}`);
+          const data: { uuid: string } = await res.json();
+          id = data.uuid;
+          localStorage.setItem(CONVERSATION_ID_STORAGE_KEY, id);
+        } catch (err) {
+          console.error("Failed to create conversation", err);
+          return;
+        }
+      }
+      if (cancelled) return;
+      setConversationId(id);
+
+      try {
+        await loadHistory(id);
+      } catch (err) {
+        console.error("Failed to load history", err);
+      }
+
+      try {
+        await resumeIfGenerating(id);
+      } catch (err) {
+        console.error("Failed to check stream status", err);
+      }
+    }
+
+    bootstrap();
+
+    return () => {
+      cancelled = true;
+      if (pollId) clearInterval(pollId);
+    };
+  }, []);
+
+  function appendToLastAssistantMessage(chunk: string) {
+    setMessages((prev) => {
+      const next = [...prev];
+      const last = next[next.length - 1];
+      next[next.length - 1] = { ...last, content: last.content + chunk };
+      return next;
+    });
+  }
 
   async function sendMessage() {
     const text = input.trim();
-    if (!text || loading) return;
+    if (!text || loading || !conversationId) return;
 
     // 先把使用者的訊息塞進畫面
     setMessages((prev) => [...prev, { role: "user", content: text }]);
     setInput("");
     setLoading(true);
+    setAwaitingFirstChunk(true);
+
+    let assistantMessageStarted = false;
 
     try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text }),
-      });
-
-      if (!res.ok) throw new Error(`API error: ${res.status}`);
-
-      const data: ChatResponse = await res.json();
-
-      setMessages((prev) => [
-        ...prev,
+      const res = await fetch(
+        `/api/conversations/${conversationId}/messages/stream`,
         {
-          role: "assistant",
-          content: data.message,
-          model: data.model,
-          latencyMs: data.latencyMs,
-        },
-      ]);
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: text }),
+        }
+      );
+
+      if (!res.ok || !res.body) throw new Error(`API error: ${res.status}`);
+
+      for await (const { event, data } of parseSseStream(res.body)) {
+        if (event === "error") {
+          throw new Error(data || "stream error");
+        }
+
+        if (!assistantMessageStarted) {
+          assistantMessageStarted = true;
+          setAwaitingFirstChunk(false);
+          setMessages((prev) => [...prev, { role: "assistant", content: data }]);
+        } else {
+          appendToLastAssistantMessage(data);
+        }
+      }
+
+      if (!assistantMessageStarted) {
+        setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+      }
     } catch (err) {
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: "⚠️ 發生錯誤，請稍後再試。" },
-      ]);
+      if (assistantMessageStarted) {
+        appendToLastAssistantMessage("\n\n⚠️ 串流中斷，請稍後再試。");
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: "⚠️ 發生錯誤，請稍後再試。" },
+        ]);
+      }
       console.error(err);
     } finally {
       setLoading(false);
+      setAwaitingFirstChunk(false);
     }
   }
 
@@ -131,7 +265,7 @@ export default function ChatPage() {
             </div>
           ))}
 
-          {loading && (
+          {awaitingFirstChunk && (
             <div className="flex justify-start">
               <div className="max-w-[75%] rounded-2xl rounded-bl-sm border bg-white px-4 py-2 text-sm text-neutral-400 shadow-sm">
                 思考中…
@@ -156,7 +290,7 @@ export default function ChatPage() {
           />
           <button
             onClick={sendMessage}
-            disabled={loading || !input.trim()}
+            disabled={loading || !input.trim() || !conversationId}
             className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             送出
