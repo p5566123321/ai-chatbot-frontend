@@ -21,7 +21,14 @@ export default function LoginPage() {
       });
 
       if (!res.ok) {
-        setError(res.status === 401 ? "帳號或密碼錯誤" : "登入失敗，請稍後再試");
+        // 401 covers both bad credentials and a blank-field validation failure (LoginRequest
+        // is deliberately just NotBlank, see its kdoc) — either way "帳號或密碼錯誤" reads fine.
+        // Anything else (e.g. a 400 the `required` attributes below didn't catch) surfaces the
+        // backend's own message instead of a generic one.
+        const data: { message?: string } | null = await res.json().catch(() => null);
+        setError(
+          res.status === 401 ? "帳號或密碼錯誤" : data?.message ?? "登入失敗，請稍後再試"
+        );
         return;
       }
 

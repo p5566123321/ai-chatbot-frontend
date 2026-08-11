@@ -35,8 +35,14 @@ export default function RegisterPage() {
     }
 
     if (!registerRes.ok) {
+      // Backend validation (ADR-007 follow-up) returns a field-level message on 400
+      // (e.g. "password: password must be between 8 and 72 characters") — surface it
+      // instead of a generic failure so the user knows what to fix.
+      const data: { message?: string } | null = await registerRes.json().catch(() => null);
       setError(
-        registerRes.status === 409 ? "這個電子郵件已經被註冊過了" : "註冊失敗，請稍後再試"
+        registerRes.status === 409
+          ? "這個電子郵件已經被註冊過了"
+          : data?.message ?? "註冊失敗，請稍後再試"
       );
       setSubmitting(false);
       return;
@@ -76,6 +82,7 @@ export default function RegisterPage() {
               id="email"
               type="email"
               required
+              maxLength={255}
               autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -91,11 +98,14 @@ export default function RegisterPage() {
               id="password"
               type="password"
               required
+              minLength={8}
+              maxLength={72}
               autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="rounded-xl border px-4 py-2 text-sm text-black outline-none focus:ring-2 focus:ring-blue-500"
             />
+            <p className="text-xs text-neutral-400">至少 8 個字元</p>
           </div>
 
           <div className="flex flex-col gap-1">
@@ -106,6 +116,8 @@ export default function RegisterPage() {
               id="confirmPassword"
               type="password"
               required
+              minLength={8}
+              maxLength={72}
               autoComplete="new-password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
