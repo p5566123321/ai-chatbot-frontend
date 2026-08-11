@@ -1,17 +1,18 @@
 import { NextResponse } from "next/server";
+import { backendFetch } from "../../lib/backend";
 
 export async function POST() {
-  const backendBaseUrl =
-    process.env.BACKEND_BASE_URL ?? "http://localhost:8080";
-
-  const backendRes = await fetch(`${backendBaseUrl}/api/conversations`, {
+  const backendRes = await backendFetch("/api/conversations", {
     method: "POST",
   });
 
   if (!backendRes.ok) {
+    // Pass the real status through (401 in particular) so the client can tell an
+    // auth failure apart from a genuine backend outage instead of everything
+    // collapsing into a generic 502.
     return NextResponse.json(
       { error: `backend error ${backendRes.status}` },
-      { status: 502 }
+      { status: backendRes.status }
     );
   }
 

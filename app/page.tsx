@@ -38,6 +38,13 @@ function toMessages(history: HistoryMessage[]): Message[] {
     }));
 }
 
+// The cookie is httpOnly, so the client can't tell in advance whether the session's
+// still valid — this is the one place every 401 from the backend (missing/expired
+// token) funnels through to bounce back to the login page.
+function handleUnauthorized() {
+  window.location.href = "/login";
+}
+
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -54,11 +61,25 @@ export default function ChatPage() {
     let cancelled = false;
     let pollId: ReturnType<typeof setInterval> | null = null;
 
-    async function loadHistory(id: string) {
-      const res = await fetch(`/api/conversations/${id}/messages`);
-      if (!res.ok || cancelled) return;
-      const history: HistoryMessage[] = await res.json();
-      if (!cancelled) setMessages(toMessages(history));
+    async function loadHistory(id: string): Promise<"ok" | "not_found" | "error"> {
+      try {
+        const res = await fetch(`/api/conversations/${id}/messages`);
+        if (cancelled) return "error";
+        if (res.status === 401) {
+          handleUnauthorized();
+          return "error";
+        }
+        // A conversationId belonging to a different account may surface as either —
+        // treat both as "this id isn't usable" rather than only 404.
+        if (res.status === 404 || res.status === 403) return "not_found";
+        if (!res.ok) return "error";
+        const history: HistoryMessage[] = await res.json();
+        if (!cancelled) setMessages(toMessages(history));
+        return "ok";
+      } catch (err) {
+        console.error("Failed to load history", err);
+        return "error";
+      }
     }
 
     // If a generation was still running when the page was last closed/refreshed, pick it back
@@ -66,6 +87,7 @@ export default function ChatPage() {
     // (possibly "[回覆中斷]"-marked) persisted content instead of leaving the UI stuck empty.
     async function resumeIfGenerating(id: string) {
       const res = await fetch(`/api/conversations/${id}/messages/stream/status`);
+      if (res.status === 401) return handleUnauthorized();
       if (!res.ok || cancelled) return;
       const status: StreamStatus = await res.json();
       if (!status.generating || cancelled) return;
@@ -76,6 +98,10 @@ export default function ChatPage() {
       pollId = setInterval(async () => {
         try {
           const pollRes = await fetch(`/api/conversations/${id}/messages/stream/status`);
+          if (pollRes.status === 401) {
+            if (pollId) clearInterval(pollId);
+            return handleUnauthorized();
+          }
           if (!pollRes.ok || cancelled) return;
           const pollStatus: StreamStatus = await pollRes.json();
           if (cancelled) return;
@@ -100,28 +126,43 @@ export default function ChatPage() {
       }, STATUS_POLL_INTERVAL_MS);
     }
 
+    async function createConversation(): Promise<string | null> {
+      try {
+        const res = await fetch("/api/conversations", { method: "POST" });
+        if (res.status === 401) {
+          handleUnauthorized();
+          return null;
+        }
+        if (!res.ok) throw new Error(`API error: ${res.status}`);
+        const data: { uuid: string } = await res.json();
+        localStorage.setItem(CONVERSATION_ID_STORAGE_KEY, data.uuid);
+        return data.uuid;
+      } catch (err) {
+        console.error("Failed to create conversation", err);
+        return null;
+      }
+    }
+
     async function bootstrap() {
       let id = localStorage.getItem(CONVERSATION_ID_STORAGE_KEY);
       if (!id) {
-        try {
-          const res = await fetch("/api/conversations", { method: "POST" });
-          if (!res.ok) throw new Error(`API error: ${res.status}`);
-          const data: { uuid: string } = await res.json();
-          id = data.uuid;
-          localStorage.setItem(CONVERSATION_ID_STORAGE_KEY, id);
-        } catch (err) {
-          console.error("Failed to create conversation", err);
-          return;
-        }
+        id = await createConversation();
+        if (!id || cancelled) return;
       }
-      if (cancelled) return;
-      setConversationId(id);
 
-      try {
-        await loadHistory(id);
-      } catch (err) {
-        console.error("Failed to load history", err);
+      let historyStatus = await loadHistory(id);
+      if (historyStatus === "not_found") {
+        // A conversationId left over from a previous login can belong to a different
+        // account — the backend 404s that exactly like an unknown id (ADR-007), so
+        // drop it and start a fresh conversation instead of leaving the UI stuck.
+        localStorage.removeItem(CONVERSATION_ID_STORAGE_KEY);
+        id = await createConversation();
+        if (!id || cancelled) return;
+        historyStatus = await loadHistory(id);
       }
+      if (cancelled || historyStatus === "error") return;
+
+      setConversationId(id);
 
       try {
         await resumeIfGenerating(id);
@@ -169,6 +210,10 @@ export default function ChatPage() {
         }
       );
 
+      if (res.status === 401) {
+        handleUnauthorized();
+        return;
+      }
       if (!res.ok || !res.body) throw new Error(`API error: ${res.status}`);
 
       for await (const { event, data } of parseSseStream(res.body)) {
@@ -211,11 +256,25 @@ export default function ChatPage() {
     }
   }
 
+  async function logout() {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } finally {
+      window.location.href = "/login";
+    }
+  }
+
   return (
     <div className="flex h-screen flex-col bg-neutral-50">
       {/* Header */}
-      <header className="border-b bg-white px-6 py-4 shadow-sm">
+      <header className="flex items-center justify-between border-b bg-white px-6 py-4 shadow-sm">
         <h1 className="text-lg font-semibold text-neutral-800">聊天機器人</h1>
+        <button
+          onClick={logout}
+          className="text-sm text-neutral-500 transition hover:text-neutral-800"
+        >
+          登出
+        </button>
       </header>
 
       {/* Message list */}

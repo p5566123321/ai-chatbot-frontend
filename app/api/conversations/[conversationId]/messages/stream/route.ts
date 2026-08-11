@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { backendFetch } from "../../../../../lib/backend";
 
 export async function POST(
   req: NextRequest,
@@ -7,11 +8,8 @@ export async function POST(
   const { conversationId } = await params;
   const { message } = await req.json();
 
-  const backendBaseUrl =
-    process.env.BACKEND_BASE_URL ?? "http://localhost:8080";
-
-  const backendRes = await fetch(
-    `${backendBaseUrl}/api/conversations/${conversationId}/messages/stream`,
+  const backendRes = await backendFetch(
+    `/api/conversations/${conversationId}/messages/stream`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -20,9 +18,15 @@ export async function POST(
   );
 
   if (!backendRes.ok || !backendRes.body) {
+    // Pass the real status through (401 in particular) so the client's `!res.ok` check
+    // can tell an auth failure apart from a genuine backend outage. Statuses like
+    // 204/205/304 forbid a response body though, so only forward a real failure status —
+    // the (unexpected) ok-but-bodyless case falls back to 502 rather than risking the
+    // Response constructor throwing on an ok body-forbidden status.
+    const status = !backendRes.ok ? backendRes.status : 502;
     return new Response(
       `event: error\ndata: backend error ${backendRes.status}\n\n`,
-      { status: 502, headers: { "Content-Type": "text/event-stream" } }
+      { status, headers: { "Content-Type": "text/event-stream" } }
     );
   }
 
