@@ -1,18 +1,18 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import { parseSseStream } from "./lib/sse";
+import AppHeader from "@/components/AppHeader";
 
 interface Message {
   role: "user" | "assistant";
   content: string;
-  model?: string;
-  latencyMs?: number;
 }
 
 interface HistoryMessage {
@@ -256,33 +256,20 @@ export default function ChatPage() {
     }
   }
 
-  async function logout() {
-    try {
-      await fetch("/api/auth/logout", { method: "POST" });
-    } finally {
-      window.location.href = "/login";
-    }
-  }
-
   return (
     <div className="flex h-screen flex-col bg-neutral-50">
-      {/* Header */}
-      <header className="flex items-center justify-between border-b bg-white px-6 py-4 shadow-sm">
-        <h1 className="text-lg font-semibold text-neutral-800">聊天機器人</h1>
-        <button
-          onClick={logout}
-          className="text-sm text-neutral-500 transition hover:text-neutral-800"
-        >
-          登出
-        </button>
-      </header>
+      <AppHeader title="聊天機器人" />
 
       {/* Message list */}
       <main className="flex-1 overflow-y-auto px-4 py-6">
         <div className="mx-auto flex max-w-2xl flex-col gap-4">
           {messages.length === 0 && (
             <p className="text-center text-sm text-neutral-400">
-              輸入訊息開始對話吧
+              輸入訊息開始對話吧，或先到「
+              <Link href="/document" className="text-blue-600 hover:underline">
+                文件管理
+              </Link>
+              」上傳文件來輔助回答
             </p>
           )}
 
@@ -314,11 +301,6 @@ export default function ChatPage() {
                   </div>
                 ) : (
                   <p className="whitespace-pre-wrap">{m.content}</p>
-                )}
-                {m.role === "assistant" && m.model && (
-                  <p className="mt-1 text-[11px] text-neutral-400">
-                    {m.model} · {m.latencyMs}ms
-                  </p>
                 )}
               </div>
             </div>
