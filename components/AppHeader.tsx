@@ -7,6 +7,7 @@ import MessageEmbeddingSwitch from "./MessageEmbeddingSwitch";
 const NAV_ITEMS = [
   { href: "/", label: "聊天" },
   { href: "/document", label: "文件管理" },
+  { href: "/settings", label: "設定" },
 ];
 
 // Mirrors the 401 handling elsewhere — logging out always lands back on /login.
