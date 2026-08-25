@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import MessageEmbeddingSwitch from "./MessageEmbeddingSwitch";
+import RagToggleSwitch from "./RagToggleSwitch";
 
 const NAV_ITEMS = [
   { href: "/", label: "聊天" },
@@ -46,6 +47,7 @@ export default function AppHeader({ title }: { title: string }) {
         </nav>
       </div>
       <div className="flex items-center gap-6">
+        <RagToggleSwitch />
         <MessageEmbeddingSwitch />
         <button
           onClick={logout}
