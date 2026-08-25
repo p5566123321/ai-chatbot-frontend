@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import MessageEmbeddingSwitch from "./MessageEmbeddingSwitch";
 
 const NAV_ITEMS = [
   { href: "/", label: "聊天" },
@@ -43,12 +44,15 @@ export default function AppHeader({ title }: { title: string }) {
           })}
         </nav>
       </div>
-      <button
-        onClick={logout}
-        className="text-sm text-neutral-500 transition hover:text-neutral-800"
-      >
-        登出
-      </button>
+      <div className="flex items-center gap-6">
+        <MessageEmbeddingSwitch />
+        <button
+          onClick={logout}
+          className="text-sm text-neutral-500 transition hover:text-neutral-800"
+        >
+          登出
+        </button>
+      </div>
     </header>
   );
 }
