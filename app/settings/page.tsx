@@ -17,6 +17,7 @@ interface UserSettings {
   email: string;
   geminiSettings: GeminiSettings;
   hasGeminiApiKey: boolean;
+  historyMaxMessages: number | null;
 }
 
 // Every field below is optional/nullable on the backend (GeminiSettings) — an empty input means
@@ -86,6 +87,11 @@ export default function SettingsPage() {
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
   const [apiKeySaved, setApiKeySaved] = useState(false);
 
+  const [historyMaxInput, setHistoryMaxInput] = useState("");
+  const [historyMaxSaving, setHistoryMaxSaving] = useState(false);
+  const [historyMaxError, setHistoryMaxError] = useState<string | null>(null);
+  const [historyMaxSaved, setHistoryMaxSaved] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -100,6 +106,7 @@ export default function SettingsPage() {
         if (cancelled) return;
         setForm(toFormState(data.geminiSettings));
         setHasGeminiApiKey(data.hasGeminiApiKey);
+        setHistoryMaxInput(data.historyMaxMessages?.toString() ?? "");
 
         if (modelsRes.ok) {
           const models: string[] = await modelsRes.json();
@@ -172,6 +179,42 @@ export default function SettingsPage() {
     } finally {
       setApiKeySaving(false);
     }
+  }
+
+  async function submitHistoryMax(maxMessages: number | null) {
+    setHistoryMaxSaving(true);
+    setHistoryMaxError(null);
+    setHistoryMaxSaved(false);
+
+    try {
+      const res = await fetch("/api/users/me/history-max-messages", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ maxMessages }),
+      });
+
+      if (res.status === 401) return handleUnauthorized();
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message ?? `API error: ${res.status}`);
+
+      setHistoryMaxInput(data.historyMaxMessages?.toString() ?? "");
+      setHistoryMaxSaved(true);
+    } catch (err) {
+      setHistoryMaxError(err instanceof Error ? err.message : "儲存失敗");
+    } finally {
+      setHistoryMaxSaving(false);
+    }
+  }
+
+  function handleHistoryMaxSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    submitHistoryMax(historyMaxInput === "" ? null : Number(historyMaxInput));
+  }
+
+  function handleHistoryMaxClear() {
+    setHistoryMaxInput("");
+    submitHistoryMax(null);
   }
 
   function updateField(field: keyof FormState, value: string) {
@@ -428,6 +471,67 @@ export default function SettingsPage() {
                   </div>
                 </form>
               </div>
+            )}
+          </section>
+
+          <section className="mt-6 rounded-xl border bg-white p-5 shadow-sm">
+            <h2 className="mb-1 text-sm font-semibold text-neutral-800">
+              對話歷史筆數
+            </h2>
+            <p className="mb-4 text-xs text-neutral-400">
+              每次回覆時，最多帶入幾則過去的訊息當作上下文。留空則使用系統預設值。
+            </p>
+
+            {loading ? (
+              <p className="text-sm text-neutral-400">載入中…</p>
+            ) : (
+              <form onSubmit={handleHistoryMaxSubmit} className="flex flex-col gap-2">
+                <label className="flex flex-col gap-1">
+                  <span className="text-sm font-medium text-neutral-700">
+                    歷史訊息筆數（1–100）
+                  </span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={100}
+                    step={1}
+                    value={historyMaxInput}
+                    onChange={(e) => {
+                      setHistoryMaxInput(e.target.value);
+                      setHistoryMaxSaved(false);
+                    }}
+                    disabled={historyMaxSaving}
+                    placeholder="使用系統預設"
+                    className={inputClass}
+                  />
+                </label>
+
+                {historyMaxError && <p className="text-sm text-red-600">{historyMaxError}</p>}
+                {historyMaxSaved && !historyMaxError && (
+                  <p className="text-sm text-green-600">已儲存</p>
+                )}
+
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    disabled={historyMaxSaving}
+                    className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {historyMaxSaving ? "儲存中…" : "儲存"}
+                  </button>
+                  {historyMaxInput !== "" && (
+                    <button
+                      type="button"
+                      onClick={handleHistoryMaxClear}
+                      disabled={historyMaxSaving}
+                      className="rounded-xl border px-4 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      使用預設
+                    </button>
+                  )}
+                </div>
+              </form>
             )}
           </section>
         </div>
