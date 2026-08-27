@@ -1,8 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
+import { useI18n } from "../lib/i18n/I18nProvider";
 
 export default function LoginPage() {
+  const { t } = useI18n();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +30,9 @@ export default function LoginPage() {
         // backend's own message instead of a generic one.
         const data: { message?: string } | null = await res.json().catch(() => null);
         setError(
-          res.status === 401 ? "帳號或密碼錯誤" : data?.message ?? "登入失敗，請稍後再試"
+          res.status === 401
+            ? t("login.errorInvalid")
+            : data?.message ?? t("login.errorGeneric")
         );
         return;
       }
@@ -35,7 +40,7 @@ export default function LoginPage() {
       window.location.href = "/";
     } catch (err) {
       console.error(err);
-      setError("登入失敗，請稍後再試");
+      setError(t("login.errorGeneric"));
     } finally {
       setSubmitting(false);
     }
@@ -44,14 +49,17 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-neutral-50 px-4">
       <div className="w-full max-w-sm rounded-2xl border bg-white p-8 shadow-sm">
+        <div className="mb-6 flex justify-end">
+          <LanguageSwitcher />
+        </div>
         <h1 className="mb-6 text-center text-xl font-semibold text-neutral-800">
-          登入聊天機器人
+          {t("login.title")}
         </h1>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1">
             <label htmlFor="email" className="text-sm text-neutral-600">
-              電子郵件
+              {t("common.email")}
             </label>
             <input
               id="email"
@@ -66,7 +74,7 @@ export default function LoginPage() {
 
           <div className="flex flex-col gap-1">
             <label htmlFor="password" className="text-sm text-neutral-600">
-              密碼
+              {t("common.password")}
             </label>
             <input
               id="password"
@@ -86,14 +94,14 @@ export default function LoginPage() {
             disabled={submitting}
             className="mt-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {submitting ? "登入中…" : "登入"}
+            {submitting ? t("login.submitting") : t("login.submit")}
           </button>
         </form>
 
         <p className="mt-6 text-center text-sm text-neutral-500">
-          還沒有帳號？{" "}
+          {t("login.noAccount")}{" "}
           <a href="/register" className="text-blue-600 hover:underline">
-            註冊
+            {t("login.registerLink")}
           </a>
         </p>
       </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useI18n } from "@/app/lib/i18n/I18nProvider";
 
 interface Document {
   id: string;
@@ -13,13 +14,6 @@ interface Document {
 // Backend today only ever produces PENDING (see DocumentStatus.kt) — the other three
 // states are reserved for once the ingestion pipeline is wired to advance them, but the
 // UI is built to reflect all four so nothing else needs to change when that lands.
-const STATUS_LABEL: Record<Document["status"], string> = {
-  PENDING: "等待處理",
-  PROCESSING: "處理中",
-  READY: "已就緒",
-  FAILED: "處理失敗",
-};
-
 const STATUS_STYLE: Record<Document["status"], string> = {
   PENDING: "bg-neutral-100 text-neutral-600",
   PROCESSING: "bg-blue-100 text-blue-700",
@@ -27,9 +21,9 @@ const STATUS_STYLE: Record<Document["status"], string> = {
   FAILED: "bg-red-100 text-red-700",
 };
 
-function formatDate(iso: string): string {
+function formatDate(iso: string, intlLocale: string): string {
   try {
-    return new Date(iso).toLocaleString("zh-TW", {
+    return new Date(iso).toLocaleString(intlLocale, {
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
@@ -60,6 +54,7 @@ async function fetchDocuments(): Promise<Document[]> {
 }
 
 export default function DocumentList({ refreshSignal }: { refreshSignal?: number }) {
+  const { t, intlLocale } = useI18n();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -98,7 +93,7 @@ export default function DocumentList({ refreshSignal }: { refreshSignal?: number
         handleUnauthorized();
         return;
       }
-      if (!res.ok) throw new Error(`刪除失敗: ${res.status}`);
+      if (!res.ok) throw new Error(`Failed to delete document: ${res.status}`);
       setDocuments((prev) => prev.filter((d) => d.id !== id));
     } catch (err) {
       console.error("Failed to delete document", err);
@@ -110,18 +105,18 @@ export default function DocumentList({ refreshSignal }: { refreshSignal?: number
   }
 
   if (loading) {
-    return <p className="text-sm text-neutral-400">載入中…</p>;
+    return <p className="text-sm text-neutral-400">{t("common.loading")}</p>;
   }
 
   if (error) {
     return (
       <div className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-3">
-        <p className="text-sm text-red-600">文件載入失敗</p>
+        <p className="text-sm text-red-600">{t("doc.loadError")}</p>
         <button
           onClick={() => setReloadToken((n) => n + 1)}
           className="text-sm font-medium text-red-700 underline hover:no-underline"
         >
-          重試
+          {t("common.retry")}
         </button>
       </div>
     );
@@ -130,7 +125,7 @@ export default function DocumentList({ refreshSignal }: { refreshSignal?: number
   if (documents.length === 0) {
     return (
       <p className="rounded-lg border border-dashed px-4 py-6 text-center text-sm text-neutral-400">
-        尚無文件，上傳文件後即可用於增強聊天回答
+        {t("doc.empty")}
       </p>
     );
   }
@@ -147,9 +142,9 @@ export default function DocumentList({ refreshSignal }: { refreshSignal?: number
               {doc.title}
             </span>
             <div className="flex items-center gap-2 text-xs text-neutral-400">
-              <span>{formatDate(doc.uploadedAt)}</span>
+              <span>{formatDate(doc.uploadedAt, intlLocale)}</span>
               <span>·</span>
-              <span>{doc.totalChunks} 個片段</span>
+              <span>{t("doc.chunks", { count: doc.totalChunks })}</span>
             </div>
           </div>
 
@@ -157,7 +152,7 @@ export default function DocumentList({ refreshSignal }: { refreshSignal?: number
             <span
               className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[doc.status]}`}
             >
-              {STATUS_LABEL[doc.status]}
+              {t(`doc.status.${doc.status}`)}
             </span>
 
             {pendingDeleteId === doc.id ? (
@@ -167,23 +162,23 @@ export default function DocumentList({ refreshSignal }: { refreshSignal?: number
                   disabled={deletingId === doc.id}
                   className="rounded px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
                 >
-                  {deletingId === doc.id ? "刪除中…" : "確定刪除"}
+                  {deletingId === doc.id ? t("doc.deleting") : t("doc.confirmDelete")}
                 </button>
                 <button
                   onClick={() => setPendingDeleteId(null)}
                   disabled={deletingId === doc.id}
                   className="rounded px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-100"
                 >
-                  取消
+                  {t("common.cancel")}
                 </button>
               </div>
             ) : (
               <button
                 onClick={() => setPendingDeleteId(doc.id)}
                 className="rounded px-2 py-1 text-xs text-neutral-400 transition hover:bg-red-50 hover:text-red-600"
-                aria-label={`刪除 ${doc.title}`}
+                aria-label={t("doc.deleteAria", { title: doc.title })}
               >
-                刪除
+                {t("doc.delete")}
               </button>
             )}
           </div>

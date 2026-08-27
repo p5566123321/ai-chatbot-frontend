@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import AppHeader from "@/components/AppHeader";
+import { useI18n } from "../lib/i18n/I18nProvider";
 
 interface GeminiSettings {
   model: string | null;
@@ -74,11 +75,16 @@ function handleUnauthorized() {
 }
 
 export default function SettingsPage() {
+  const { t } = useI18n();
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [modelOptions, setModelOptions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Set by the mount effect on a load failure. Kept separate from `error` (which holds a
+  // save failure, sometimes a raw backend message) so the effect stays translation-free
+  // and its dep array can stay empty — the text is resolved at render time instead.
+  const [loadFailed, setLoadFailed] = useState(false);
   const [saved, setSaved] = useState(false);
 
   const [hasGeminiApiKey, setHasGeminiApiKey] = useState(false);
@@ -115,7 +121,7 @@ export default function SettingsPage() {
       })
       .catch((err) => {
         console.error("Failed to load gemini settings", err);
-        if (!cancelled) setError("載入設定失敗，請重新整理");
+        if (!cancelled) setLoadFailed(true);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -149,7 +155,7 @@ export default function SettingsPage() {
       setApiKeyInput("");
       setApiKeySaved(true);
     } catch (err) {
-      setApiKeyError(err instanceof Error ? err.message : "儲存失敗");
+      setApiKeyError(err instanceof Error ? err.message : t("common.saveFailed"));
     } finally {
       setApiKeySaving(false);
     }
@@ -175,7 +181,7 @@ export default function SettingsPage() {
       setHasGeminiApiKey(data.hasGeminiApiKey);
       setApiKeyInput("");
     } catch (err) {
-      setApiKeyError(err instanceof Error ? err.message : "清除失敗");
+      setApiKeyError(err instanceof Error ? err.message : t("settings.apiKey.clearFailed"));
     } finally {
       setApiKeySaving(false);
     }
@@ -201,7 +207,7 @@ export default function SettingsPage() {
       setHistoryMaxInput(data.historyMaxMessages?.toString() ?? "");
       setHistoryMaxSaved(true);
     } catch (err) {
-      setHistoryMaxError(err instanceof Error ? err.message : "儲存失敗");
+      setHistoryMaxError(err instanceof Error ? err.message : t("common.saveFailed"));
     } finally {
       setHistoryMaxSaving(false);
     }
@@ -243,7 +249,7 @@ export default function SettingsPage() {
       setForm(toFormState(data.geminiSettings));
       setSaved(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "儲存失敗");
+      setError(err instanceof Error ? err.message : t("common.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -252,22 +258,24 @@ export default function SettingsPage() {
   const inputClass =
     "w-full rounded-lg border px-3 py-2 text-sm text-black outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50";
 
+  const geminiError = error ?? (loadFailed ? t("settings.loadError") : null);
+
   return (
     <div className="flex h-screen flex-col bg-neutral-50">
-      <AppHeader title="設定" />
+      <AppHeader titleKey="page.settings.title" />
 
       <main className="flex-1 overflow-y-auto px-4 py-6">
         <div className="mx-auto max-w-2xl">
           <section className="rounded-xl border bg-white p-5 shadow-sm">
             <h2 className="mb-1 text-sm font-semibold text-neutral-800">
-              Gemini 模型參數
+              {t("settings.gemini.title")}
             </h2>
             <p className="mb-4 text-xs text-neutral-400">
-              留空的欄位會使用 Gemini 預設值。這些設定套用在你之後傳送的每一則訊息。
+              {t("settings.gemini.desc")}
             </p>
 
             {loading ? (
-              <p className="text-sm text-neutral-400">載入中…</p>
+              <p className="text-sm text-neutral-400">{t("common.loading")}</p>
             ) : (
               <form onSubmit={handleSubmit} className="flex flex-col gap-4">
                 <label className="flex flex-col gap-1">
@@ -278,7 +286,7 @@ export default function SettingsPage() {
                     disabled={saving}
                     className={inputClass}
                   >
-                    <option value="">使用預設</option>
+                    <option value="">{t("settings.model.useDefault")}</option>
                     {modelOptions.map((id) => (
                       <option key={id} value={id}>
                         {id}
@@ -297,7 +305,7 @@ export default function SettingsPage() {
                     disabled={saving}
                     rows={4}
                     maxLength={10000}
-                    placeholder="例如：請用繁體中文簡潔回答"
+                    placeholder={t("settings.systemInstruction.placeholder")}
                     className={`${inputClass} resize-y`}
                   />
                 </label>
@@ -387,9 +395,9 @@ export default function SettingsPage() {
                   </label>
                 </div>
 
-                {error && <p className="text-sm text-red-600">{error}</p>}
-                {saved && !error && (
-                  <p className="text-sm text-green-600">已儲存</p>
+                {geminiError && <p className="text-sm text-red-600">{geminiError}</p>}
+                {saved && !geminiError && (
+                  <p className="text-sm text-green-600">{t("common.saved")}</p>
                 )}
 
                 <div>
@@ -398,7 +406,7 @@ export default function SettingsPage() {
                     disabled={saving}
                     className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {saving ? "儲存中…" : "儲存"}
+                    {saving ? t("common.saving") : t("common.save")}
                   </button>
                 </div>
               </form>
@@ -407,23 +415,26 @@ export default function SettingsPage() {
 
           <section className="mt-6 rounded-xl border bg-white p-5 shadow-sm">
             <h2 className="mb-1 text-sm font-semibold text-neutral-800">
-              Gemini API Key（自帶金鑰）
+              {t("settings.apiKey.title")}
             </h2>
             <p className="mb-4 text-xs text-neutral-400">
-              設定後，你的訊息會改用這把金鑰呼叫 Gemini，而不是系統預設的金鑰。金鑰只會加密儲存，
-              儲存後不會再顯示明文。
+              {t("settings.apiKey.desc")}
             </p>
 
             {loading ? (
-              <p className="text-sm text-neutral-400">載入中…</p>
+              <p className="text-sm text-neutral-400">{t("common.loading")}</p>
             ) : (
               <div className="flex flex-col gap-4">
                 <p className="text-sm text-neutral-700">
-                  目前狀態：
+                  {t("settings.apiKey.statusLabel")}
                   {hasGeminiApiKey ? (
-                    <span className="font-medium text-green-600">已設定</span>
+                    <span className="font-medium text-green-600">
+                      {t("settings.apiKey.statusSet")}
+                    </span>
                   ) : (
-                    <span className="font-medium text-neutral-400">尚未設定</span>
+                    <span className="font-medium text-neutral-400">
+                      {t("settings.apiKey.statusUnset")}
+                    </span>
                   )}
                 </p>
 
@@ -439,7 +450,11 @@ export default function SettingsPage() {
                       }}
                       disabled={apiKeySaving}
                       maxLength={200}
-                      placeholder={hasGeminiApiKey ? "輸入新金鑰以取代目前設定" : "貼上你的 Gemini API key"}
+                      placeholder={
+                        hasGeminiApiKey
+                          ? t("settings.apiKey.placeholderReplace")
+                          : t("settings.apiKey.placeholderNew")
+                      }
                       className={inputClass}
                       autoComplete="off"
                     />
@@ -447,7 +462,7 @@ export default function SettingsPage() {
 
                   {apiKeyError && <p className="text-sm text-red-600">{apiKeyError}</p>}
                   {apiKeySaved && !apiKeyError && (
-                    <p className="text-sm text-green-600">已儲存</p>
+                    <p className="text-sm text-green-600">{t("common.saved")}</p>
                   )}
 
                   <div className="flex gap-2">
@@ -456,7 +471,7 @@ export default function SettingsPage() {
                       disabled={apiKeySaving || !apiKeyInput.trim()}
                       className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {apiKeySaving ? "處理中…" : "儲存"}
+                      {apiKeySaving ? t("settings.apiKey.processing") : t("common.save")}
                     </button>
                     {hasGeminiApiKey && (
                       <button
@@ -465,7 +480,7 @@ export default function SettingsPage() {
                         disabled={apiKeySaving}
                         className="rounded-xl border px-4 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        清除
+                        {t("settings.apiKey.clear")}
                       </button>
                     )}
                   </div>
@@ -476,19 +491,19 @@ export default function SettingsPage() {
 
           <section className="mt-6 rounded-xl border bg-white p-5 shadow-sm">
             <h2 className="mb-1 text-sm font-semibold text-neutral-800">
-              對話歷史筆數
+              {t("settings.history.title")}
             </h2>
             <p className="mb-4 text-xs text-neutral-400">
-              每次回覆時，最多帶入幾則過去的訊息當作上下文。留空則使用系統預設值。
+              {t("settings.history.desc")}
             </p>
 
             {loading ? (
-              <p className="text-sm text-neutral-400">載入中…</p>
+              <p className="text-sm text-neutral-400">{t("common.loading")}</p>
             ) : (
               <form onSubmit={handleHistoryMaxSubmit} className="flex flex-col gap-2">
                 <label className="flex flex-col gap-1">
                   <span className="text-sm font-medium text-neutral-700">
-                    歷史訊息筆數（1–100）
+                    {t("settings.history.fieldLabel")}
                   </span>
                   <input
                     type="number"
@@ -502,14 +517,14 @@ export default function SettingsPage() {
                       setHistoryMaxSaved(false);
                     }}
                     disabled={historyMaxSaving}
-                    placeholder="使用系統預設"
+                    placeholder={t("settings.history.placeholder")}
                     className={inputClass}
                   />
                 </label>
 
                 {historyMaxError && <p className="text-sm text-red-600">{historyMaxError}</p>}
                 {historyMaxSaved && !historyMaxError && (
-                  <p className="text-sm text-green-600">已儲存</p>
+                  <p className="text-sm text-green-600">{t("common.saved")}</p>
                 )}
 
                 <div className="flex gap-2">
@@ -518,7 +533,7 @@ export default function SettingsPage() {
                     disabled={historyMaxSaving}
                     className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {historyMaxSaving ? "儲存中…" : "儲存"}
+                    {historyMaxSaving ? t("common.saving") : t("common.save")}
                   </button>
                   {historyMaxInput !== "" && (
                     <button
@@ -527,7 +542,7 @@ export default function SettingsPage() {
                       disabled={historyMaxSaving}
                       className="rounded-xl border px-4 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      使用預設
+                      {t("settings.history.useDefault")}
                     </button>
                   )}
                 </div>

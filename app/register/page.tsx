@@ -1,8 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
+import { useI18n } from "../lib/i18n/I18nProvider";
 
 export default function RegisterPage() {
+  const { t } = useI18n();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -14,7 +17,7 @@ export default function RegisterPage() {
     setError(null);
 
     if (password !== confirmPassword) {
-      setError("兩次輸入的密碼不一致");
+      setError(t("register.errorPasswordMismatch"));
       return;
     }
 
@@ -29,7 +32,7 @@ export default function RegisterPage() {
       });
     } catch (err) {
       console.error(err);
-      setError("註冊失敗，請稍後再試");
+      setError(t("register.errorGeneric"));
       setSubmitting(false);
       return;
     }
@@ -41,8 +44,8 @@ export default function RegisterPage() {
       const data: { message?: string } | null = await registerRes.json().catch(() => null);
       setError(
         registerRes.status === 409
-          ? "這個電子郵件已經被註冊過了"
-          : data?.message ?? "註冊失敗，請稍後再試"
+          ? t("register.errorEmailTaken")
+          : data?.message ?? t("register.errorGeneric")
       );
       setSubmitting(false);
       return;
@@ -69,14 +72,17 @@ export default function RegisterPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-neutral-50 px-4">
       <div className="w-full max-w-sm rounded-2xl border bg-white p-8 shadow-sm">
+        <div className="mb-6 flex justify-end">
+          <LanguageSwitcher />
+        </div>
         <h1 className="mb-6 text-center text-xl font-semibold text-neutral-800">
-          註冊新帳號
+          {t("register.title")}
         </h1>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1">
             <label htmlFor="email" className="text-sm text-neutral-600">
-              電子郵件
+              {t("common.email")}
             </label>
             <input
               id="email"
@@ -92,7 +98,7 @@ export default function RegisterPage() {
 
           <div className="flex flex-col gap-1">
             <label htmlFor="password" className="text-sm text-neutral-600">
-              密碼
+              {t("common.password")}
             </label>
             <input
               id="password"
@@ -105,12 +111,12 @@ export default function RegisterPage() {
               onChange={(e) => setPassword(e.target.value)}
               className="rounded-xl border px-4 py-2 text-sm text-black outline-none focus:ring-2 focus:ring-blue-500"
             />
-            <p className="text-xs text-neutral-400">至少 8 個字元</p>
+            <p className="text-xs text-neutral-400">{t("register.passwordHint")}</p>
           </div>
 
           <div className="flex flex-col gap-1">
             <label htmlFor="confirmPassword" className="text-sm text-neutral-600">
-              確認密碼
+              {t("register.confirmPassword")}
             </label>
             <input
               id="confirmPassword"
@@ -132,14 +138,14 @@ export default function RegisterPage() {
             disabled={submitting}
             className="mt-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {submitting ? "註冊中…" : "註冊"}
+            {submitting ? t("register.submitting") : t("register.submit")}
           </button>
         </form>
 
         <p className="mt-6 text-center text-sm text-neutral-500">
-          已經有帳號了？{" "}
+          {t("register.haveAccount")}{" "}
           <a href="/login" className="text-blue-600 hover:underline">
-            登入
+            {t("register.loginLink")}
           </a>
         </p>
       </div>

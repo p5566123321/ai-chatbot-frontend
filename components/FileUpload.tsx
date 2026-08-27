@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useI18n } from "@/app/lib/i18n/I18nProvider";
 
 // Mirrors the 401 handling in app/page.tsx — any expired/missing token bounces
 // back to the login page instead of leaving the upload silently stuck.
@@ -21,6 +22,7 @@ export default function FileUpload({
 }: {
   onUploadSuccess?: (data: UploadedDocument) => void;
 }) {
+  const { t } = useI18n();
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploadedName, setUploadedName] = useState<string | null>(null);
@@ -47,13 +49,14 @@ export default function FileUpload({
         handleUnauthorized();
         return;
       }
-      if (!res.ok) throw new Error(`上傳失敗: ${res.status}`);
+      if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
 
       const data = await res.json();
       setUploadedName(file.name);
       onUploadSuccess?.(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "上傳失敗");
+      console.error("Failed to upload document", err);
+      setError(t("upload.failed"));
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = "";
@@ -69,10 +72,12 @@ export default function FileUpload({
         disabled={uploading}
         className="text-sm text-neutral-600 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-600 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:file:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
       />
-      {uploading && <p className="text-sm text-neutral-500">上傳中…</p>}
+      {uploading && <p className="text-sm text-neutral-500">{t("upload.uploading")}</p>}
       {error && <p className="text-sm text-red-600">{error}</p>}
       {!uploading && !error && uploadedName && (
-        <p className="text-sm text-green-600">已上傳「{uploadedName}」</p>
+        <p className="text-sm text-green-600">
+          {t("upload.success", { name: uploadedName })}
+        </p>
       )}
     </div>
   );

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useI18n } from "@/app/lib/i18n/I18nProvider";
 
 interface UserSettings {
   ragEnabled: boolean;
@@ -12,6 +13,7 @@ interface UserSettings {
 // default) since RAG already runs automatically for anyone with documents; this switch only lets
 // someone turn it off, not opt into it.
 export default function RagToggleSwitch() {
+  const { t } = useI18n();
   const [enabled, setEnabled] = useState<boolean | null>(null); // null while loading
   const [saving, setSaving] = useState(false);
 
@@ -60,12 +62,12 @@ export default function RagToggleSwitch() {
 
   return (
     <div className="flex items-center gap-2">
-      <span className="text-sm text-neutral-500">RAG 檢索</span>
+      <span className="text-sm text-neutral-500">{t("rag.label")}</span>
       <button
         type="button"
         role="switch"
         aria-checked={enabled}
-        aria-label="切換聊天時是否使用 RAG 檢索"
+        aria-label={t("rag.aria")}
         onClick={toggle}
         disabled={saving}
         className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${

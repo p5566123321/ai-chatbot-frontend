@@ -8,6 +8,7 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import { parseSseStream } from "./lib/sse";
+import { useI18n } from "./lib/i18n/I18nProvider";
 import AppHeader from "@/components/AppHeader";
 
 interface Message {
@@ -46,6 +47,7 @@ function handleUnauthorized() {
 }
 
 export default function ChatPage() {
+  const { t } = useI18n();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -235,11 +237,11 @@ export default function ChatPage() {
       }
     } catch (err) {
       if (assistantMessageStarted) {
-        appendToLastAssistantMessage("\n\n⚠️ 串流中斷，請稍後再試。");
+        appendToLastAssistantMessage(t("chat.streamInterrupted"));
       } else {
         setMessages((prev) => [
           ...prev,
-          { role: "assistant", content: "⚠️ 發生錯誤，請稍後再試。" },
+          { role: "assistant", content: t("chat.error") },
         ]);
       }
       console.error(err);
@@ -258,18 +260,18 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-screen flex-col bg-neutral-50">
-      <AppHeader title="聊天機器人" />
+      <AppHeader titleKey="page.chat.title" />
 
       {/* Message list */}
       <main className="flex-1 overflow-y-auto px-4 py-6">
         <div className="mx-auto flex max-w-2xl flex-col gap-4">
           {messages.length === 0 && (
             <p className="text-center text-sm text-neutral-400">
-              輸入訊息開始對話吧，或先到「
+              {t("chat.empty.prefix")}
               <Link href="/document" className="text-blue-600 hover:underline">
-                文件管理
+                {t("chat.empty.link")}
               </Link>
-              」上傳文件來輔助回答
+              {t("chat.empty.suffix")}
             </p>
           )}
 
@@ -309,7 +311,7 @@ export default function ChatPage() {
           {awaitingFirstChunk && (
             <div className="flex justify-start">
               <div className="max-w-[75%] rounded-2xl rounded-bl-sm border bg-white px-4 py-2 text-sm text-neutral-400 shadow-sm">
-                思考中…
+                {t("chat.thinking")}
               </div>
             </div>
           )}
@@ -326,7 +328,7 @@ export default function ChatPage() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             rows={1}
-            placeholder="輸入訊息…（Enter 送出，Shift+Enter 換行）"
+            placeholder={t("chat.inputPlaceholder")}
             className="flex-1 resize-none rounded-xl border px-4 py-2 text-sm text-black outline-none focus:ring-2 focus:ring-blue-500"
           />
           <button
@@ -334,7 +336,7 @@ export default function ChatPage() {
             disabled={loading || !input.trim() || !conversationId}
             className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            送出
+            {t("chat.send")}
           </button>
         </div>
       </footer>
